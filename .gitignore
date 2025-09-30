@@ -1,0 +1,70 @@
+# Build artifacts
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+k_stable_matching
+
+# Compiled binaries
+/bin/
+/build/
+/dist/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Analysis output files
+*.png
+*.jpg
+*.jpeg
+*.pdf
+*.csv
+*.txt
+!README.md
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.out
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Test coverage
+*.gcov
+*.gcda
+*.gcno
+
+# Profiling data
+*.prof
+gmon.out
+
+# Core dumps
+core
+core.*
