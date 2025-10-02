@@ -94,7 +94,7 @@ static bool find_k_stable_matching_recursive(const problem_instance_t* instance,
         
         // Model-specific constraints
         if (instance->model == MARRIAGE) {
-            int num_men = instance->num_agents / 2;
+            int num_men = instance->model_data.marriage_data.num_men;
             if ((agent_index < num_men && partner < num_men) || 
                 (agent_index >= num_men && partner >= num_men)) {
                 continue;
@@ -290,7 +290,7 @@ bool k_stable_matching_exists_small_k(const problem_instance_t* instance, int k)
                 
                 // Check model constraints
                 if (instance->model == MARRIAGE) {
-                    int num_men = instance->num_agents / 2;
+                    int num_men = instance->model_data.marriage_data.num_men;
                     if ((i < num_men && preferred < num_men) || 
                         (i >= num_men && preferred >= num_men)) {
                         continue;
@@ -366,7 +366,7 @@ bool k_stable_matching_exists_large_k(const problem_instance_t* instance, int k)
             
             // Check model constraints
             if (instance->model == MARRIAGE) {
-                int num_men = instance->num_agents / 2;
+                int num_men = instance->model_data.marriage_data.num_men;
                 if ((agent < num_men && preferred < num_men) || 
                     (agent >= num_men && preferred >= num_men)) {
                     continue;
@@ -463,8 +463,8 @@ static int count_k_stable_matchings_recursive(const problem_instance_t* instance
         
         // Model-specific constraints
         if (instance->model == MARRIAGE) {
-            // In marriage model, we need to determine the number of men and women
-            int num_men = instance->num_agents / 2;  // Assume equal numbers for now
+            // In marriage model, use the actual metadata for number of men and women
+            int num_men = instance->model_data.marriage_data.num_men;
             
             // Men (0 to num_men-1) can only match with women (num_men to num_agents-1)
             if ((agent_index < num_men && partner < num_men) || 
