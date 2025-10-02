@@ -10,22 +10,32 @@ void benchmark_verification_complexity(int max_agents, int num_trials) {
     printf("Testing polynomial time claim: verification should be O(n^c) for some constant c\n");
     printf("Max agents: %d, Trials per size: %d\n\n", max_agents, num_trials);
     
-    printf("Agents\tAvg Time (ms)\tStd Dev\t\tTrials\n");
-    printf("------\t-------------\t-------\t\t------\n");
+    printf("Agents\tAvg Time (ms)\tStd Dev\t\tMin Time\tMax Time\tTrials\tSuccess Rate\n");
+    printf("------\t-------------\t-------\t\t--------\t--------\t------\t------------\n");
     
-    for (int n = 5; n <= max_agents; n += 5) {
+    // Use better step sizes for more comprehensive testing
+    for (int n = 5; n <= max_agents; n += (n < 20) ? 3 : (n < 50) ? 5 : 10) {
+        // printf("DEBUG: Testing with %d agents...\n", n);
         double total_time = 0.0;
         double sum_squared = 0.0;
+        double min_time = 1e9;
+        double max_time = 0.0;
         int successful_trials = 0;
         
         for (int trial = 0; trial < num_trials; trial++) {
+            // printf("DEBUG: Trial %d/%d for n=%d\n", trial+1, num_trials, n);
+            
             // Generate random instance
             problem_instance_t* instance = generate_random_house_allocation(n, time(NULL) + trial);
-            if (instance == NULL) continue;
+            if (instance == NULL) {
+                // printf("DEBUG: Failed to generate instance for trial %d\n", trial);
+                continue;
+            }
             
             // Create a random matching
             matching_t* matching = create_matching(n, HOUSE_ALLOCATION);
             if (matching == NULL) {
+                // printf("DEBUG: Failed to create matching for trial %d\n", trial);
                 free(instance);
                 continue;
             }
@@ -36,13 +46,17 @@ void benchmark_verification_complexity(int max_agents, int num_trials) {
             }
             
             // Benchmark verification
+            // printf("DEBUG: Starting verification for trial %d...\n", trial);
             clock_t start = clock();
             is_k_stable_direct(matching, instance, n/2);  // k = n/2
             clock_t end = clock();
+            // printf("DEBUG: Verification completed for trial %d\n", trial);
             
             double time_ms = ((double)(end - start)) / CLOCKS_PER_SEC * 1000.0;
             total_time += time_ms;
             sum_squared += time_ms * time_ms;
+            if (time_ms < min_time) min_time = time_ms;
+            if (time_ms > max_time) max_time = time_ms;
             successful_trials++;
             
             destroy_matching(matching);
@@ -53,8 +67,10 @@ void benchmark_verification_complexity(int max_agents, int num_trials) {
             double avg_time = total_time / successful_trials;
             double variance = (sum_squared / successful_trials) - (avg_time * avg_time);
             double std_dev = sqrt(variance);
+            double success_rate = (double)successful_trials / num_trials;
             
-            printf("%d\t%.3f\t\t%.3f\t\t%d\n", n, avg_time, std_dev, successful_trials);
+            printf("%d\t%.3f\t\t%.3f\t\t%.3f\t\t%.3f\t\t%d\t%.2f\n", 
+                   n, avg_time, std_dev, min_time, max_time, successful_trials, success_rate);
         }
     }
     
@@ -71,6 +87,7 @@ void benchmark_existence_complexity(int max_agents, int num_trials) {
     printf("------\t---\t-------------\t-------\t\t------\t------\n");
     
     for (int n = 4; n <= max_agents; n += 2) {
+        // printf("DEBUG: Testing existence with %d agents...\n", n);
         // Test different k/n ratios
         double ratios[] = {0.25, 0.5, 0.75};
         int num_ratios = sizeof(ratios) / sizeof(ratios[0]);
@@ -79,20 +96,29 @@ void benchmark_existence_complexity(int max_agents, int num_trials) {
             int k = (int)(n * ratios[r]);
             if (k <= 0) k = 1;
             
+            // printf("DEBUG: Testing k=%d (ratio=%.2f) for n=%d\n", k, ratios[r], n);
+            
             double total_time = 0.0;
             double sum_squared = 0.0;
             int successful_trials = 0;
             int exists_count = 0;
             
             for (int trial = 0; trial < num_trials; trial++) {
+                // printf("DEBUG: Existence trial %d/%d for n=%d, k=%d\n", trial+1, num_trials, n, k);
+                
                 // Generate random instance
                 problem_instance_t* instance = generate_random_house_allocation(n, time(NULL) + trial);
-                if (instance == NULL) continue;
+                if (instance == NULL) {
+                    // printf("DEBUG: Failed to generate instance for existence trial %d\n", trial);
+                    continue;
+                }
                 
                 // Benchmark existence checking
+                // printf("DEBUG: Starting existence check for trial %d...\n", trial);
                 clock_t start = clock();
                 bool exists = k_stable_matching_exists(instance, k);
                 clock_t end = clock();
+                // printf("DEBUG: Existence check completed for trial %d (result: %s)\n", trial, exists ? "EXISTS" : "NOT EXISTS");
                 
                 double time_ms = ((double)(end - start)) / CLOCKS_PER_SEC * 1000.0;
                 total_time += time_ms;

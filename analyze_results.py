@@ -41,8 +41,10 @@ def parse_benchmark_output(filename):
             continue
         
         # Parse data lines
-        if current_section and line and not line.startswith('=') and not line.startswith('Testing'):
+        if current_section and line and not line.startswith('=') and not line.startswith('Testing') and not line.startswith('Agents') and not line.startswith('------') and not line.startswith('Note'):
             parts = line.split('\t')
+            # Filter out empty parts
+            parts = [p for p in parts if p.strip()]
             if len(parts) >= 3:
                 try:
                     if current_section == 'verification':
@@ -60,7 +62,7 @@ def parse_benchmark_output(filename):
                         agents = int(parts[0])
                         k_ratio = float(parts[1])
                         avg_time = float(parts[2])
-                        std_dev = float(parts[3])
+                        std_dev = float(parts[3]) if parts[3] != 'nan' else 0.0
                         trials = int(parts[4])
                         exists_rate = float(parts[5])
                         results['existence'].append({
@@ -71,7 +73,8 @@ def parse_benchmark_output(filename):
                             'trials': trials,
                             'exists_rate': exists_rate
                         })
-                except (ValueError, IndexError):
+                except (ValueError, IndexError) as e:
+                    print(f"Error parsing line: {line} -> {parts} -> {e}")
                     continue
     
     return results

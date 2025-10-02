@@ -30,8 +30,13 @@ test: $(TARGET)
 benchmark: $(TARGET)
 	./$(TARGET) --benchmark
 
+# Run comprehensive tests
+test_algorithms: tests/test_algorithms.c $(OBJECTS)
+	$(CC) $(CFLAGS) tests/test_algorithms.c $(filter-out src/main.o, $(OBJECTS)) -o tests/test_algorithms $(LDFLAGS)
+	./tests/test_algorithms
+
 # Create directories
 setup:
 	mkdir -p src include tests data results
 
-.PHONY: all clean test benchmark setup
+.PHONY: all clean test benchmark setup test_algorithms

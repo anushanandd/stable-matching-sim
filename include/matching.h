@@ -33,6 +33,16 @@ typedef struct {
     agent_t agents[MAX_AGENTS];
     int num_agents;
     matching_model_t model;
+    // Model-specific metadata
+    union {
+        struct {
+            int num_men;
+            int num_women;
+        } marriage_data;
+        struct {
+            int num_houses;
+        } house_data;
+    } model_data;
 } problem_instance_t;
 
 // Function declarations

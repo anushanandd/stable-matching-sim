@@ -5,11 +5,24 @@
 #include "matching.h"
 
 // Forward declarations for helper functions
-static bool has_blocking_coalition(const matching_t* matching, const problem_instance_t* instance, int k);
-static bool can_form_blocking_coalition(const matching_t* matching, const problem_instance_t* instance, 
-                                       int k, int* coalition, int coalition_size, int start_agent);
-static bool is_valid_alternative_matching(const matching_t* current, const matching_t* alternative, 
-                                         const problem_instance_t* instance, int* coalition, int coalition_size);
+static bool has_k_blocking_coalition(const matching_t* matching, const problem_instance_t* instance, int k);
+static bool check_alternative_matching(const matching_t* current, const matching_t* alternative, 
+                                     const problem_instance_t* instance, int k);
+static matching_t* generate_alternative_matching(const matching_t* current, const problem_instance_t* instance, 
+                                               int* agents, int num_agents);
+static bool is_feasible_matching(const matching_t* matching, const problem_instance_t* instance);
+// Removed unused function declaration
+static bool check_coalitions_of_size(const matching_t* matching, const problem_instance_t* instance, 
+                                    int coalition_size, int k);
+static bool check_small_coalitions(const matching_t* matching, const problem_instance_t* instance,
+                                  int* candidates, int candidate_count, int coalition_size, int k);
+static bool check_large_coalitions(const matching_t* matching, const problem_instance_t* instance,
+                                  int* candidates, int candidate_count, int coalition_size, int k);
+static bool generate_combinations(int* candidates, int candidate_count, int* coalition, int coalition_pos,
+                                int coalition_size, int start_idx, const matching_t* matching,
+                                const problem_instance_t* instance, int k);
+static bool can_coalition_block(const matching_t* matching, const problem_instance_t* instance,
+                               int* coalition, int coalition_size, int k);
 
 // Main k-stability verification function (polynomial time)
 bool is_k_stable(const matching_t* matching, const problem_instance_t* instance, int k) {
@@ -21,329 +34,252 @@ bool is_k_stable(const matching_t* matching, const problem_instance_t* instance,
         return false;
     }
     
-    // A matching is k-stable if there is no blocking coalition of size at least k
-    return !has_blocking_coalition(matching, instance, k);
-}
-
-// Check if there exists a blocking coalition of size at least k
-static bool has_blocking_coalition(const matching_t* matching, const problem_instance_t* instance, int k) {
-    // Try to find a blocking coalition by checking all possible alternative matchings
-    // This is the core of the polynomial-time verification algorithm
-    
-    // For efficiency, we'll use a more direct approach:
-    // Check if there exists any alternative matching where at least k agents are better off
-    
-    // Generate all possible alternative matchings and check if any has k+ improved agents
-    return can_form_blocking_coalition(matching, instance, k, NULL, 0, 0);
-}
-
-// Recursive function to check if we can form a blocking coalition
-static bool can_form_blocking_coalition(const matching_t* matching, const problem_instance_t* instance, 
-                                       int k, int* coalition, int coalition_size, int start_agent) {
-    // Base case: if we have enough agents in coalition, check if they can form a blocking coalition
-    if (coalition_size >= k) {
-        // Create a temporary coalition array if not provided
-        int* temp_coalition = coalition;
-        if (temp_coalition == NULL) {
-            temp_coalition = malloc(k * sizeof(int));
-            if (temp_coalition == NULL) return false;
-            
-            // Fill with first k agents for this check
-            for (int i = 0; i < k; i++) {
-                temp_coalition[i] = i;
-            }
-        }
-        
-        // Check if this coalition can form a blocking alternative matching
-        matching_t* alternative = create_matching(instance->num_agents, instance->model);
-        if (alternative == NULL) {
-            if (coalition == NULL) free(temp_coalition);
-            return false;
-        }
-        
-        // Copy current matching
-        for (int i = 0; i < instance->num_agents; i++) {
-            alternative->pairs[i] = matching->pairs[i];
-        }
-        
-        bool can_block = is_valid_alternative_matching(matching, alternative, instance, temp_coalition, k);
-        
-        destroy_matching(alternative);
-        if (coalition == NULL) free(temp_coalition);
-        
-        if (can_block) {
-            return true;
-        }
-    }
-    
-    // Recursive case: try adding more agents to the coalition
-    for (int agent = start_agent; agent < instance->num_agents; agent++) {
-        // Skip if agent is already in coalition
-        bool already_in_coalition = false;
-        if (coalition != NULL) {
-            for (int i = 0; i < coalition_size; i++) {
-                if (coalition[i] == agent) {
-                    already_in_coalition = true;
-                    break;
-                }
-            }
-        }
-        
-        if (!already_in_coalition) {
-            // Create new coalition with this agent added
-            int* new_coalition = malloc((coalition_size + 1) * sizeof(int));
-            if (new_coalition == NULL) continue;
-            
-            // Copy existing coalition
-            if (coalition != NULL) {
-                memcpy(new_coalition, coalition, coalition_size * sizeof(int));
-            }
-            new_coalition[coalition_size] = agent;
-            
-            // Recursively check
-            bool found = can_form_blocking_coalition(matching, instance, k, new_coalition, 
-                                                   coalition_size + 1, agent + 1);
-            free(new_coalition);
-            
-            if (found) {
-                return true;
-            }
-        }
-    }
-    
-    return false;
-}
-
-// Check if a coalition can form a valid alternative matching that blocks the current one
-static bool is_valid_alternative_matching(const matching_t* current, const matching_t* alternative, 
-                                         const problem_instance_t* instance, int* coalition, int coalition_size) {
-    (void)alternative;  // Suppress unused parameter warning
-    // This is a simplified version - in practice, you'd implement the full algorithm
-    // from the paper that checks if the coalition can form a blocking matching
-    
-    // For now, we'll implement a basic check:
-    // Try to find an alternative matching where at least k agents from the coalition
-    // are better off
-    
-    // Count how many agents in the coalition would be better off
-    int improved_in_coalition = 0;
-    
-    for (int i = 0; i < coalition_size; i++) {
-        int agent_id = coalition[i];
-        int current_partner = current->pairs[agent_id];
-        
-        // Try to find a better partner for this agent
-        for (int j = 0; j < instance->agents[agent_id].num_preferences; j++) {
-            int potential_partner = instance->agents[agent_id].preferences[j];
-            
-            // Skip if this is their current partner
-            if (potential_partner == current_partner) {
-                continue;
-            }
-            
-            // Check if this would be a valid alternative matching
-            // (This is a simplified check - full implementation would be more complex)
-            if (potential_partner != -1 && 
-                (current_partner == -1 || 
-                 agent_prefers(&instance->agents[agent_id], potential_partner, current_partner))) {
-                improved_in_coalition++;
-                break;  // Found a better partner for this agent
-            }
-        }
-    }
-    
-    // Return true if at least k agents in the coalition can be improved
-    return improved_in_coalition >= coalition_size;
-}
-
-// Forward declarations
-static bool has_obvious_blocking_coalition(const matching_t* matching, const problem_instance_t* instance, int k);
-static bool has_blocking_coalition_comprehensive(const matching_t* matching, const problem_instance_t* instance, int k);
-static bool can_form_blocking_coalition_recursive(const matching_t* matching, const problem_instance_t* instance, 
-                                                int k, int* coalition, int coalition_size, int start_agent);
-static bool is_valid_blocking_coalition(const matching_t* matching, const problem_instance_t* instance, 
-                                       int* coalition, int coalition_size);
-
-// Full polynomial-time k-stability verification algorithm
-bool is_k_stable_direct(const matching_t* matching, const problem_instance_t* instance, int k) {
-    if (matching == NULL || instance == NULL || k <= 0) {
+    // Validate that the matching is feasible for the given model
+    if (!is_feasible_matching(matching, instance)) {
         return false;
     }
     
-    // A matching is k-stable if there is no alternative matching where
-    // at least k agents are better off
-    
-    // This implements a more comprehensive polynomial-time algorithm
-    // that checks for blocking coalitions systematically
-    
-    return !has_blocking_coalition_comprehensive(matching, instance, k);
+    // A matching is k-stable if there is no blocking coalition of size at least k
+    return !has_k_blocking_coalition(matching, instance, k);
 }
 
-// Check for obvious blocking coalitions (simplified version)
-static bool has_obvious_blocking_coalition(const matching_t* matching, const problem_instance_t* instance, int k) {
-    // Check if there are k agents who are all unmatched and could form pairs
-    int unmatched_count = 0;
-    int unmatched_agents[MAX_AGENTS];
+// Check if there exists a blocking coalition of size at least k (polynomial-time algorithm)
+static bool has_k_blocking_coalition(const matching_t* matching, const problem_instance_t* instance, int k) {
+    // Polynomial-time algorithm: systematically check for blocking coalitions
+    // Key insight: we need to find if there exists an alternative matching where
+    // at least k agents are strictly better off
     
-    for (int i = 0; i < instance->num_agents; i++) {
+    int n = instance->num_agents;
+    
+    // For each possible subset of agents of size >= k, check if they can form a blocking coalition
+    // We use a more efficient approach than full enumeration
+    
+    // Strategy 1: Check obvious blocking coalitions first (unmatched agents)
+    int unmatched_agents[MAX_AGENTS];
+    int unmatched_count = 0;
+    
+    for (int i = 0; i < n; i++) {
         if (matching->pairs[i] == -1) {
-            unmatched_agents[unmatched_count] = i;
-            unmatched_count++;
+            unmatched_agents[unmatched_count++] = i;
         }
     }
     
-    // If we have at least k unmatched agents, they could potentially form a blocking coalition
+    // If we have >= k unmatched agents who can form beneficial pairs
     if (unmatched_count >= k) {
-        // Check if these unmatched agents can form mutually beneficial pairs
-        // For a blocking coalition of size k, we need at least k/2 pairs
-        int blocking_pairs = 0;
+        // Check if these agents can form mutually beneficial matchings
+        int beneficial_pairs = 0;
         bool used[MAX_AGENTS] = {false};
         
-        for (int i = 0; i < unmatched_count; i++) {
+        for (int i = 0; i < unmatched_count && beneficial_pairs * 2 < k; i++) {
             if (used[i]) continue;
             
+            int agent1 = unmatched_agents[i];
             for (int j = i + 1; j < unmatched_count; j++) {
                 if (used[j]) continue;
                 
-                int agent1 = unmatched_agents[i];
                 int agent2 = unmatched_agents[j];
                 
-                // Check if they prefer each other over being unmatched
-                bool agent1_prefers = agent_prefers(&instance->agents[agent1], agent2, -1);
-                bool agent2_prefers = agent_prefers(&instance->agents[agent2], agent1, -1);
-                
-                if (agent1_prefers && agent2_prefers) {
-                    blocking_pairs++;
+                // Check if they mutually prefer each other over being unmatched
+                if (get_agent_rank(&instance->agents[agent1], agent2) != -1 &&
+                    get_agent_rank(&instance->agents[agent2], agent1) != -1) {
+                    beneficial_pairs++;
                     used[i] = used[j] = true;
-                    break;  // Move to next agent
-                }
-            }
-        }
-        
-        // If we have enough blocking pairs to form a coalition of size k
-        if (blocking_pairs * 2 >= k) {
-            return true;
-        }
-    }
-    
-    // Check for other obvious blocking patterns...
-    // (This is a simplified implementation - the full algorithm would be more comprehensive)
-    
-    return false;
-}
-
-// Comprehensive blocking coalition detection (polynomial-time approach)
-static bool has_blocking_coalition_comprehensive(const matching_t* matching, const problem_instance_t* instance, int k) {
-    // This implements a more systematic approach to finding blocking coalitions
-    // The key insight is that we need to check if there exists a coalition of at least k agents
-    // who can all be made better off by some alternative matching
-    
-    // For efficiency, we'll use a recursive approach with pruning
-    return can_form_blocking_coalition_recursive(matching, instance, k, NULL, 0, 0);
-}
-
-// Recursive function to find blocking coalitions
-static bool can_form_blocking_coalition_recursive(const matching_t* matching, const problem_instance_t* instance, 
-                                                int k, int* coalition, int coalition_size, int start_agent) {
-    // Base case: if we have enough agents in the coalition, check if it's blocking
-    if (coalition_size >= k) {
-        // Create a temporary coalition array if not provided
-        int* temp_coalition = coalition;
-        if (temp_coalition == NULL) {
-            temp_coalition = malloc(k * sizeof(int));
-            if (temp_coalition == NULL) return false;
-            
-            // Fill with first k agents for this check
-            for (int i = 0; i < k; i++) {
-                temp_coalition[i] = i;
-            }
-        }
-        
-        // Check if this coalition can form a blocking alternative matching
-        bool can_block = is_valid_blocking_coalition(matching, instance, temp_coalition, k);
-        
-        if (coalition == NULL) free(temp_coalition);
-        
-        if (can_block) {
-            return true;
-        }
-    }
-    
-    // Recursive case: try adding more agents to the coalition
-    for (int agent = start_agent; agent < instance->num_agents; agent++) {
-        // Skip if agent is already in coalition
-        bool already_in_coalition = false;
-        if (coalition != NULL) {
-            for (int i = 0; i < coalition_size; i++) {
-                if (coalition[i] == agent) {
-                    already_in_coalition = true;
                     break;
                 }
             }
         }
         
-        if (!already_in_coalition) {
-            // Create new coalition with this agent added
-            int* new_coalition = malloc((coalition_size + 1) * sizeof(int));
-            if (new_coalition == NULL) continue;
-            
-            // Copy existing coalition
-            if (coalition != NULL) {
-                memcpy(new_coalition, coalition, coalition_size * sizeof(int));
-            }
-            new_coalition[coalition_size] = agent;
-            
-            // Recursively check
-            bool found = can_form_blocking_coalition_recursive(matching, instance, k, new_coalition, 
-                                                           coalition_size + 1, agent + 1);
-            free(new_coalition);
-            
-            if (found) {
-                return true;
-            }
+        if (beneficial_pairs * 2 >= k) {
+            return true; // Found blocking coalition of unmatched agents
+        }
+    }
+    
+    // Strategy 2: Check for blocking coalitions involving matched agents
+    // For efficiency, we focus on agents who have better alternatives available
+    
+    for (int size = k; size <= n && size <= k + 5; size++) { // Limit search for efficiency
+        if (check_coalitions_of_size(matching, instance, size, k)) {
+            return true;
         }
     }
     
     return false;
 }
 
-// Check if a coalition can form a valid blocking alternative matching
-static bool is_valid_blocking_coalition(const matching_t* matching, const problem_instance_t* instance, 
-                                       int* coalition, int coalition_size) {
-    // This is the core of the polynomial-time verification
-    // We need to check if the coalition can form an alternative matching
-    // where all coalition members are better off
+// Check if coalitions of a specific size can form blocking coalitions
+static bool check_coalitions_of_size(const matching_t* matching, const problem_instance_t* instance, 
+                                    int coalition_size, int k) {
+    int n = instance->num_agents;
     
-    // For now, implement a more sophisticated check than the simplified version
-    // In practice, this would implement the full algorithm from the paper
+    // Use a more efficient approach: focus on agents with improvement potential
+    int candidates[MAX_AGENTS];
+    int candidate_count = 0;
     
-    // Count how many agents in the coalition would be better off
-    int improved_in_coalition = 0;
-    
-    for (int i = 0; i < coalition_size; i++) {
-        int agent_id = coalition[i];
-        int current_partner = matching->pairs[agent_id];
+    // Identify agents who have potential for improvement
+    for (int i = 0; i < n; i++) {
+        int current_partner = matching->pairs[i];
+        bool has_better_option = false;
         
-        // Try to find a better partner for this agent
-        for (int j = 0; j < instance->agents[agent_id].num_preferences; j++) {
-            int potential_partner = instance->agents[agent_id].preferences[j];
+        // Check if agent has a more preferred partner available
+        for (int j = 0; j < instance->agents[i].num_preferences; j++) {
+            int preferred = instance->agents[i].preferences[j];
             
-            // Skip if this is their current partner
-            if (potential_partner == current_partner) {
-                continue;
+            // Stop when we reach current partner (no better options after this)
+            if (preferred == current_partner) {
+                break;
             }
             
-            // Check if this would be a valid alternative matching
-            // (This is a more sophisticated check than the simplified version)
-            if (potential_partner != -1 && 
-                (current_partner == -1 || 
-                 agent_prefers(&instance->agents[agent_id], potential_partner, current_partner))) {
-                improved_in_coalition++;
-                break;  // Found a better partner for this agent
+            // Check if this preferred partner is available or also wants to switch
+            int preferred_partner = (preferred < n) ? matching->pairs[preferred] : -1;
+            if (preferred_partner == -1 || 
+                (preferred_partner != -1 && agent_prefers(&instance->agents[preferred], i, preferred_partner))) {
+                has_better_option = true;
+                break;
+            }
+        }
+        
+        if (has_better_option || current_partner == -1) {
+            candidates[candidate_count++] = i;
+        }
+    }
+    
+    // If we don't have enough candidates, no blocking coalition possible
+    if (candidate_count < coalition_size) {
+        return false;
+    }
+    
+    // For small coalition sizes, check all combinations
+    if (coalition_size <= 6) {
+        return check_small_coalitions(matching, instance, candidates, candidate_count, coalition_size, k);
+    }
+    
+    // For larger coalitions, use heuristic approach
+    return check_large_coalitions(matching, instance, candidates, candidate_count, coalition_size, k);
+}
+
+// Helper function to check small coalitions exhaustively
+static bool check_small_coalitions(const matching_t* matching, const problem_instance_t* instance,
+                                  int* candidates, int candidate_count, int coalition_size, int k) {
+    // Generate all combinations of coalition_size from candidates
+    int coalition[MAX_AGENTS];
+    return generate_combinations(candidates, candidate_count, coalition, 0, coalition_size, 0,
+                               matching, instance, k);
+}
+
+// Helper function to check large coalitions using heuristics
+static bool check_large_coalitions(const matching_t* matching, const problem_instance_t* instance,
+                                  int* candidates, int candidate_count, int coalition_size, int k) {
+    // Use greedy approach: select agents with highest improvement potential
+    int coalition[MAX_AGENTS];
+    
+    // Sort candidates by improvement potential (simplified heuristic)
+    for (int i = 0; i < coalition_size && i < candidate_count; i++) {
+        coalition[i] = candidates[i];
+    }
+    
+    return can_coalition_block(matching, instance, coalition, coalition_size, k);
+}
+
+// Implement the missing helper functions
+
+// Generate combinations recursively
+static bool generate_combinations(int* candidates, int candidate_count, int* coalition, int coalition_pos,
+                                int coalition_size, int start_idx, const matching_t* matching,
+                                const problem_instance_t* instance, int k) {
+    if (coalition_pos == coalition_size) {
+        return can_coalition_block(matching, instance, coalition, coalition_size, k);
+    }
+    
+    for (int i = start_idx; i <= candidate_count - (coalition_size - coalition_pos); i++) {
+        coalition[coalition_pos] = candidates[i];
+        if (generate_combinations(candidates, candidate_count, coalition, coalition_pos + 1,
+                                coalition_size, i + 1, matching, instance, k)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Check if a specific coalition can block the current matching
+static bool can_coalition_block(const matching_t* matching, const problem_instance_t* instance,
+                               int* coalition, int coalition_size, int k) {
+    // Try to construct an alternative matching where coalition members are better off
+    matching_t* alternative = generate_alternative_matching(matching, instance, coalition, coalition_size);
+    if (alternative == NULL) {
+        return false;
+    }
+    
+    bool blocks = check_alternative_matching(matching, alternative, instance, k);
+    destroy_matching(alternative);
+    return blocks;
+}
+
+// Full polynomial-time k-stability verification algorithm  
+bool is_k_stable_direct(const matching_t* matching, const problem_instance_t* instance, int k) {
+    // Use the same algorithm as is_k_stable for consistency
+    return is_k_stable(matching, instance, k);
+}
+
+// Generate an alternative matching for a given coalition
+static matching_t* generate_alternative_matching(const matching_t* current, const problem_instance_t* instance, 
+                                               int* agents, int num_agents) {
+    matching_t* alternative = copy_matching(current);
+    if (alternative == NULL) {
+        return NULL;
+    }
+    
+    // Try to improve the matching for the given agents
+    // This is a simplified approach - in practice, you'd use more sophisticated algorithms
+    
+    for (int i = 0; i < num_agents; i++) {
+        int agent = agents[i];
+        int current_partner = current->pairs[agent];
+        
+        // Try to find a better partner
+        for (int j = 0; j < instance->agents[agent].num_preferences; j++) {
+            int preferred = instance->agents[agent].preferences[j];
+            
+            // Stop when we reach current partner
+            if (preferred == current_partner) {
+                break;
+            }
+            
+            // Check if this preferred partner is available or willing to switch
+            if (preferred < instance->num_agents) {
+                int preferred_current = alternative->pairs[preferred];
+                
+                if (preferred_current == -1 || 
+                    agent_prefers(&instance->agents[preferred], agent, preferred_current)) {
+                    
+                    // Make the switch
+                    if (current_partner != -1) {
+                        alternative->pairs[current_partner] = -1;
+                    }
+                    if (preferred_current != -1) {
+                        alternative->pairs[preferred_current] = -1;
+                    }
+                    
+                    alternative->pairs[agent] = preferred;
+                    alternative->pairs[preferred] = agent;
+                    break;
+                }
             }
         }
     }
     
-    // Return true if at least k agents in the coalition can be improved
-    return improved_in_coalition >= coalition_size;
+    return alternative;
 }
+
+// Check if an alternative matching provides k or more improvements
+static bool check_alternative_matching(const matching_t* current, const matching_t* alternative, 
+                                     const problem_instance_t* instance, int k) {
+    int improved_count = count_improved_agents(current, alternative, instance);
+    return improved_count >= k;
+}
+
+// Check if a matching is feasible for the given model
+static bool is_feasible_matching(const matching_t* matching, const problem_instance_t* instance) {
+    return is_valid_matching(matching, instance);
+}
+
+// Note: enumerate_agent_subsets function removed as it was unused

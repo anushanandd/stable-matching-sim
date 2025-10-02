@@ -150,30 +150,41 @@ bool is_valid_matching(const matching_t* matching, const problem_instance_t* ins
     // Model-specific validation
     switch (matching->model) {
         case HOUSE_ALLOCATION:
+            {
             // In house allocation, each house can only be assigned to one agent
-            // and each agent can only get one house
+            // and each agent can get at most one house
+            // Note: pairs[i] represents the house assigned to agent i (-1 if no house)
+            bool house_assigned[MAX_AGENTS] = {false};
+            
             for (int i = 0; i < matching->num_agents; i++) {
                 int house = matching->pairs[i];
                 if (house != -1) {
-                    // Check that this house is not assigned to multiple agents
-                    for (int j = i + 1; j < matching->num_agents; j++) {
-                        if (matching->pairs[j] == house) {
-                            return false;  // House assigned to multiple agents
-                        }
+                    // Check that house ID is valid
+                    if (house < 0 || house >= matching->num_agents) {
+                        return false;
                     }
+                    // Check that this house is not assigned to multiple agents
+                    if (house_assigned[house]) {
+                        return false;  // House assigned to multiple agents
+                    }
+                    house_assigned[house] = true;
                 }
+            }
             }
             break;
             
         case MARRIAGE:
-            // In marriage model, we assume first half are men, second half are women
-            // Each man can only be matched with a woman and vice versa
+            // In marriage model, men can only be matched with women and vice versa
+            // Use the metadata to determine gender boundaries
             for (int i = 0; i < matching->num_agents; i++) {
                 int partner = matching->pairs[i];
                 if (partner != -1) {
                     // Check that men are matched with women and vice versa
-                    int half = matching->num_agents / 2;
-                    if ((i < half && partner < half) || (i >= half && partner >= half)) {
+                    int num_men = instance->model_data.marriage_data.num_men;
+                    bool i_is_man = (i < num_men);
+                    bool partner_is_man = (partner < num_men);
+                    
+                    if (i_is_man == partner_is_man) {
                         return false;  // Same gender matching
                     }
                 }

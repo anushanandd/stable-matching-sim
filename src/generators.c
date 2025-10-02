@@ -4,16 +4,34 @@
 #include <time.h>
 #include "matching.h"
 
-// Simple linear congruential generator for reproducible randomness
-static uint32_t lcg_state = 1;
+// Improved random number generator using xorshift32
+static uint32_t rng_state = 1;
 
+static uint32_t xorshift32() {
+    // Xorshift32 algorithm - much better quality than LCG
+    rng_state ^= rng_state << 13;
+    rng_state ^= rng_state >> 17;
+    rng_state ^= rng_state << 5;
+    return rng_state;
+}
+
+static void rng_seed(uint32_t seed) {
+    // Ensure seed is never 0 (would break xorshift)
+    rng_state = (seed == 0) ? 1 : seed;
+    
+    // Warm up the generator
+    for (int i = 0; i < 10; i++) {
+        xorshift32();
+    }
+}
+
+// Wrapper for compatibility
 static uint32_t lcg_rand() {
-    lcg_state = lcg_state * 1103515245 + 12345;
-    return lcg_state;
+    return xorshift32();
 }
 
 static void lcg_seed(uint32_t seed) {
-    lcg_state = seed;
+    rng_seed(seed);
 }
 
 // Fisher-Yates shuffle algorithm
@@ -41,6 +59,7 @@ problem_instance_t* generate_random_house_allocation(int num_agents, uint32_t se
     
     instance->num_agents = num_agents;
     instance->model = HOUSE_ALLOCATION;
+    instance->model_data.house_data.num_houses = num_agents;
     
     // Initialize agents
     for (int i = 0; i < num_agents; i++) {
@@ -74,6 +93,8 @@ problem_instance_t* generate_random_marriage(int num_men, int num_women, uint32_
     
     instance->num_agents = num_men + num_women;
     instance->model = MARRIAGE;
+    instance->model_data.marriage_data.num_men = num_men;
+    instance->model_data.marriage_data.num_women = num_women;
     
     // Initialize men (agents 0 to num_men-1)
     for (int i = 0; i < num_men; i++) {
@@ -122,6 +143,7 @@ problem_instance_t* generate_random_roommates(int num_agents, uint32_t seed) {
     
     instance->num_agents = num_agents;
     instance->model = ROOMMATES;
+    // Note: For roommates, odd numbers mean one agent will remain unmatched
     
     // Initialize agents
     for (int i = 0; i < num_agents; i++) {
@@ -154,6 +176,7 @@ problem_instance_t* generate_test_case_1() {
     
     instance->num_agents = 3;
     instance->model = HOUSE_ALLOCATION;
+    instance->model_data.house_data.num_houses = 3;
     
     // Agent 0: prefers house 1 > 2 > 0
     instance->agents[0].id = 0;
@@ -192,6 +215,7 @@ problem_instance_t* generate_k_stable_exists_case(int num_agents, int k) {
     
     instance->num_agents = num_agents;
     instance->model = HOUSE_ALLOCATION;
+    instance->model_data.house_data.num_houses = num_agents;
     
     // Create a case where agents have very similar preferences
     // This makes it more likely that a k-stable matching exists
@@ -221,6 +245,7 @@ problem_instance_t* generate_k_stable_unlikely_case(int num_agents, int k) {
     
     instance->num_agents = num_agents;
     instance->model = HOUSE_ALLOCATION;
+    instance->model_data.house_data.num_houses = num_agents;
     
     // Create a case where agents have very different preferences
     // This makes it less likely that a k-stable matching exists

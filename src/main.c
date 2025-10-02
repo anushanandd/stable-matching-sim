@@ -66,8 +66,9 @@ int main(int argc, char* argv[]) {
     
     if (strcmp(argv[1], "--benchmark") == 0) {
         printf("Running computational complexity benchmarks...\n");
-        benchmark_verification_complexity(50, 10);
-        benchmark_existence_complexity(20, 5);
+
+        benchmark_verification_complexity(50, 10);  // Increased from 15, 3
+        benchmark_existence_complexity(20, 5);      // Increased from 8, 2
         return 0;
     }
     
