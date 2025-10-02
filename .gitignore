@@ -6,10 +6,19 @@
 *.exe
 k_stable_matching
 
+# Debug symbols (macOS)
+*.dSYM/
+
 # Compiled binaries
 /bin/
 /build/
 /dist/
+
+# Test executables (temporary)
+test_*
+!test_*.c
+tests/test_algorithms
+!tests/test_algorithms.c
 
 # IDE and editor files
 .vscode/
@@ -23,7 +32,6 @@ k_stable_matching
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
 .Python
 env/
 venv/
@@ -31,14 +39,16 @@ ENV/
 env.bak/
 venv.bak/
 
-# Analysis output files
+# Analysis output files (keep important ones)
 *.png
 *.jpg
 *.jpeg
 *.pdf
 *.csv
-*.txt
+benchmark_results.txt
+results/*.txt
 !README.md
+!IMPROVEMENTS.md
 
 # Temporary files
 *.tmp
@@ -54,7 +64,6 @@ Desktop.ini
 # Backup files
 *.bak
 *.backup
-*~
 
 # Test coverage
 *.gcov
