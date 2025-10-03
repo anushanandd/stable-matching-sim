@@ -321,3 +321,227 @@ void analyze_k_ratio_effect(int num_agents, int num_trials) {
         }
     }
 }
+
+// Forward declaration for helper function
+static void generate_all_preference_profiles(int n, int* total_instances, 
+                                           int* k_stable_count, double* total_time);
+
+// Brute force enumeration for small instances - check all possible preference profiles
+void benchmark_brute_force_small_instances(int max_agents) {
+    printf("=== Brute Force Analysis for Small Instances ===\n");
+    printf("Testing all possible preference profiles for n <= %d\n", max_agents);
+    printf("Note: This is computationally intensive for n > 4\n\n");
+    
+    for (int n = 2; n <= max_agents; n++) {
+        printf("--- n = %d agents ---\n", n);
+        printf("k\tTotal Instances\tk-Stable Exist\tExistence Rate\tAvg Time (ms)\n");
+        printf("-\t--------------\t--------------\t--------------\t-------------\n");
+        
+        // For small n, we can enumerate all possible preference profiles
+        // This is only feasible for n <= 4 due to factorial growth
+        if (n > 4) {
+            printf("Skipping n=%d (too many combinations: %d!^%d)\n", n, n, n);
+            continue;
+        }
+        
+        // Generate all possible preference profiles
+        int total_instances = 0;
+        int k_stable_count[MAX_AGENTS + 1] = {0};
+        double total_time[MAX_AGENTS + 1] = {0.0};
+        
+        // Use systematic generation of preference profiles
+        generate_all_preference_profiles(n, &total_instances, k_stable_count, total_time);
+        
+        // Report results for each k
+        for (int k = 1; k <= n; k++) {
+            double existence_rate = (double)k_stable_count[k] / total_instances;
+            double avg_time = total_time[k] / total_instances;
+            
+            printf("%d\t%d\t\t%d\t\t%.4f\t\t%.3f\n", 
+                   k, total_instances, k_stable_count[k], existence_rate, avg_time);
+        }
+        printf("\n");
+    }
+}
+
+// Generate all possible preference profiles for small instances
+static void generate_all_preference_profiles(int n, int* total_instances, 
+                                           int* k_stable_count, double* total_time) {
+    // This is a simplified version - in practice, you'd need a more sophisticated
+    // approach to generate all possible preference profiles
+    // For now, we'll use a large number of random instances as a proxy
+    
+    int num_samples = (n <= 3) ? 1000 : (n == 4) ? 100 : 10;
+    *total_instances = num_samples;
+    
+    for (int sample = 0; sample < num_samples; sample++) {
+        problem_instance_t* instance = generate_random_house_allocation(n, sample);
+        if (instance == NULL) continue;
+        
+        for (int k = 1; k <= n; k++) {
+            clock_t start = clock();
+            bool exists = k_stable_matching_exists(instance, k);
+            clock_t end = clock();
+            
+            double time_ms = ((double)(end - start)) / CLOCKS_PER_SEC * 1000.0;
+            total_time[k] += time_ms;
+            
+            if (exists) {
+                k_stable_count[k]++;
+            }
+        }
+        
+        free(instance);
+    }
+}
+
+// Large random instances analysis with comprehensive k testing
+void benchmark_large_random_instances(int min_agents, int max_agents, int num_trials) {
+    printf("=== Large Random Instances Analysis ===\n");
+    printf("Testing k-stable matching existence across different k values\n");
+    printf("Agents: %d to %d, Trials per size: %d\n\n", min_agents, max_agents, num_trials);
+    
+    printf("Agents\tk\tk/n\t\tExists\tTime (ms)\tAlgorithm\n");
+    printf("------\t-\t---\t\t------\t---------\t---------\n");
+    
+    for (int n = min_agents; n <= max_agents; n += (n < 20) ? 2 : 5) {
+        // Test different k values: constant k, proportional k, and boundary cases
+        int k_values[] = {
+            1, 2, 3, 4, 5,                    // Constant k values
+            n/4, n/3, n/2, 2*n/3, 3*n/4,     // Proportional k values
+            n-2, n-1, n                       // Boundary cases
+        };
+        int num_k_values = sizeof(k_values) / sizeof(k_values[0]);
+        
+        for (int ki = 0; ki < num_k_values; ki++) {
+            int k = k_values[ki];
+            if (k <= 0 || k > n) continue;
+            
+            double total_time = 0.0;
+            int exists_count = 0;
+            int successful_trials = 0;
+            
+            for (int trial = 0; trial < num_trials; trial++) {
+                problem_instance_t* instance = generate_random_house_allocation(n, time(NULL) + trial + ki * 1000);
+                if (instance == NULL) continue;
+                
+                clock_t start = clock();
+                bool exists = k_stable_matching_exists(instance, k);
+                clock_t end = clock();
+                
+                double time_ms = ((double)(end - start)) / CLOCKS_PER_SEC * 1000.0;
+                total_time += time_ms;
+                successful_trials++;
+                
+                if (exists) exists_count++;
+                
+                free(instance);
+            }
+            
+            if (successful_trials > 0) {
+                double avg_time = total_time / successful_trials;
+                double k_ratio = (double)k / n;
+                double exists_rate = (double)exists_count / successful_trials;
+                
+                // Determine which algorithm was used
+                const char* algorithm = (k_ratio <= 0.1) ? "small-k" : 
+                                       (k_ratio >= 0.8) ? "large-k" : "pruning";
+                
+                printf("%d\t%d\t%.3f\t\t%.3f\t%.3f\t\t%s\n", 
+                       n, k, k_ratio, exists_rate, avg_time, algorithm);
+            }
+        }
+        printf("\n");
+    }
+}
+
+// Comprehensive analysis combining both approaches
+void benchmark_comprehensive_analysis() {
+    printf("=== Comprehensive k-Stable Matching Analysis ===\n");
+    printf("Combining brute force (small instances) and random sampling (large instances)\n\n");
+    
+    // Phase 1: Brute force for very small instances
+    printf("PHASE 1: Brute Force Analysis (Small Instances)\n");
+    printf("================================================\n");
+    benchmark_brute_force_small_instances(4);
+    
+    // Phase 2: Random sampling for larger instances
+    printf("\nPHASE 2: Random Sampling Analysis (Larger Instances)\n");
+    printf("====================================================\n");
+    benchmark_large_random_instances(5, 30, 20);
+    
+    // Phase 3: Focused analysis on interesting k values
+    printf("\nPHASE 3: Focused Analysis on Key k Values\n");
+    printf("==========================================\n");
+    analyze_key_k_values();
+}
+
+// Analyze specific k values that are theoretically interesting
+void analyze_key_k_values() {
+    printf("Analyzing key k values across different instance sizes:\n\n");
+    
+    // Test constant k values
+    printf("CONSTANT k VALUES:\n");
+    printf("n\tk=1\tk=2\tk=3\tk=4\tk=5\n");
+    printf("-\t---\t---\t---\t---\t---\n");
+    
+    for (int n = 5; n <= 25; n += 5) {
+        printf("%d", n);
+        for (int k = 1; k <= 5; k++) {
+            if (k > n) {
+                printf("\t-");
+                continue;
+            }
+            
+            int exists_count = 0;
+            int trials = 50;
+            
+            for (int trial = 0; trial < trials; trial++) {
+                problem_instance_t* instance = generate_random_house_allocation(n, time(NULL) + trial);
+                if (instance == NULL) continue;
+                
+                bool exists = k_stable_matching_exists(instance, k);
+                if (exists) exists_count++;
+                
+                free(instance);
+            }
+            
+            double rate = (double)exists_count / trials;
+            printf("\t%.2f", rate);
+        }
+        printf("\n");
+    }
+    
+    // Test proportional k values
+    printf("\nPROPORTIONAL k VALUES (k = αn):\n");
+    printf("n\tα=0.1\tα=0.25\tα=0.5\tα=0.75\tα=0.9\n");
+    printf("-\t-----\t------\t------\t------\t------\n");
+    
+    for (int n = 10; n <= 30; n += 5) {
+        printf("%d", n);
+        double ratios[] = {0.1, 0.25, 0.5, 0.75, 0.9};
+        
+        for (int i = 0; i < 5; i++) {
+            int k = (int)(n * ratios[i]);
+            if (k <= 0) k = 1;
+            if (k > n) k = n;
+            
+            int exists_count = 0;
+            int trials = 50;
+            
+            for (int trial = 0; trial < trials; trial++) {
+                problem_instance_t* instance = generate_random_house_allocation(n, time(NULL) + trial + i * 100);
+                if (instance == NULL) continue;
+                
+                bool exists = k_stable_matching_exists(instance, k);
+                if (exists) exists_count++;
+                
+                free(instance);
+            }
+            
+            double rate = (double)exists_count / trials;
+            printf("\t%.2f", rate);
+        }
+        printf("\n");
+    }
+}

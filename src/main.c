@@ -14,6 +14,10 @@ void print_usage(const char* program_name) {
     printf("  --generate MODEL N  Generate random instance (house|marriage|roommates) with N agents\n");
     printf("  --verify-model MODEL N K  Test verification with specific model\n");
     printf("  --existence-model MODEL N K  Test existence with specific model\n");
+    printf("  --brute-force N     Run brute force analysis for small instances (n <= N)\n");
+    printf("  --large-random MIN MAX TRIALS  Run large random instances analysis\n");
+    printf("  --comprehensive     Run comprehensive analysis (brute force + large random)\n");
+    printf("  --key-k-values      Analyze key k values (constant and proportional)\n");
     printf("  --help              Show this help message\n");
 }
 
@@ -275,6 +279,49 @@ int main(int argc, char* argv[]) {
         printf("Result: %s (took %.6f seconds)\n", exists ? "exists" : "does not exist", time_taken);
         
         free(instance);
+        return 0;
+    }
+    
+    if (strcmp(argv[1], "--brute-force") == 0) {
+        if (argc < 3) {
+            printf("Error: --brute-force requires N parameter\n");
+            return 1;
+        }
+        int max_agents = atoi(argv[2]);
+        if (max_agents <= 0 || max_agents > 6) {
+            printf("Error: N must be between 1 and 6 for brute force analysis\n");
+            return 1;
+        }
+        
+        benchmark_brute_force_small_instances(max_agents);
+        return 0;
+    }
+    
+    if (strcmp(argv[1], "--large-random") == 0) {
+        if (argc < 5) {
+            printf("Error: --large-random requires MIN MAX TRIALS parameters\n");
+            return 1;
+        }
+        int min_agents = atoi(argv[2]);
+        int max_agents = atoi(argv[3]);
+        int num_trials = atoi(argv[4]);
+        
+        if (min_agents <= 0 || max_agents <= 0 || num_trials <= 0 || min_agents > max_agents) {
+            printf("Error: Invalid parameters for --large-random\n");
+            return 1;
+        }
+        
+        benchmark_large_random_instances(min_agents, max_agents, num_trials);
+        return 0;
+    }
+    
+    if (strcmp(argv[1], "--comprehensive") == 0) {
+        benchmark_comprehensive_analysis();
+        return 0;
+    }
+    
+    if (strcmp(argv[1], "--key-k-values") == 0) {
+        analyze_key_k_values();
         return 0;
     }
     

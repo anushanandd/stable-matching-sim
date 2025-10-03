@@ -87,4 +87,10 @@ void benchmark_existence_complexity(int max_agents, int num_trials);
 void benchmark_model_comparison(int num_agents, int num_trials);
 void analyze_k_ratio_effect(int num_agents, int num_trials);
 
+// Enhanced benchmarking functions
+void benchmark_brute_force_small_instances(int max_agents);
+void benchmark_large_random_instances(int min_agents, int max_agents, int num_trials);
+void benchmark_comprehensive_analysis(void);
+void analyze_key_k_values(void);
+
 #endif // MATCHING_H
