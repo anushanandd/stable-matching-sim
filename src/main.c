@@ -18,6 +18,9 @@ void print_usage(const char* program_name) {
     printf("  --large-random MIN MAX TRIALS  Run large random instances analysis\n");
     printf("  --comprehensive     Run comprehensive analysis (brute force + large random)\n");
     printf("  --key-k-values      Analyze key k values (constant and proportional)\n");
+    printf("  --k-hai N O T       Run k-hai comparison (N agents, O objects, T trials)\n");
+    printf("  --partial-vs-complete N T  Compare partial vs complete preferences\n");
+    printf("  --k-hai-patterns N O T     Analyze k-hai existence patterns\n");
     printf("  --help              Show this help message\n");
 }
 
@@ -322,6 +325,59 @@ int main(int argc, char* argv[]) {
     
     if (strcmp(argv[1], "--key-k-values") == 0) {
         analyze_key_k_values();
+        return 0;
+    }
+    
+    if (strcmp(argv[1], "--k-hai") == 0) {
+        if (argc < 5) {
+            printf("Error: --k-hai requires N O T parameters\n");
+            return 1;
+        }
+        int num_agents = atoi(argv[2]);
+        int num_objects = atoi(argv[3]);
+        int num_trials = atoi(argv[4]);
+        
+        if (num_agents <= 0 || num_objects <= 0 || num_trials <= 0) {
+            printf("Error: Invalid parameters for --k-hai\n");
+            return 1;
+        }
+        
+        benchmark_k_hai_comparison(num_agents, num_objects, num_trials);
+        return 0;
+    }
+    
+    if (strcmp(argv[1], "--partial-vs-complete") == 0) {
+        if (argc < 4) {
+            printf("Error: --partial-vs-complete requires N T parameters\n");
+            return 1;
+        }
+        int num_agents = atoi(argv[2]);
+        int num_trials = atoi(argv[3]);
+        
+        if (num_agents <= 0 || num_trials <= 0) {
+            printf("Error: Invalid parameters for --partial-vs-complete\n");
+            return 1;
+        }
+        
+        benchmark_partial_vs_complete_preferences(num_agents, num_trials);
+        return 0;
+    }
+    
+    if (strcmp(argv[1], "--k-hai-patterns") == 0) {
+        if (argc < 5) {
+            printf("Error: --k-hai-patterns requires N O T parameters\n");
+            return 1;
+        }
+        int num_agents = atoi(argv[2]);
+        int num_objects = atoi(argv[3]);
+        int num_trials = atoi(argv[4]);
+        
+        if (num_agents <= 0 || num_objects <= 0 || num_trials <= 0) {
+            printf("Error: Invalid parameters for --k-hai-patterns\n");
+            return 1;
+        }
+        
+        analyze_k_hai_existence_patterns(num_agents, num_objects, num_trials);
         return 0;
     }
     

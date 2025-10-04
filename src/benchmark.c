@@ -364,35 +364,149 @@ void benchmark_brute_force_small_instances(int max_agents) {
     }
 }
 
-// Generate all possible preference profiles for small instances
+// Forward declarations for systematic enumeration
+static void generate_all_agent_permutations(int* base_perm, int n, int agent_index,
+                                          int* total_instances, int* k_stable_count, double* total_time);
+static void generate_agent_permutation(int* arr, int start, int end, int agent_index, int n,
+                                     int* total_instances, int* k_stable_count, double* total_time);
+static void process_complete_preference_profile(int n, int* k_stable_count, double* total_time);
+static void swap(int* a, int* b);
+
+// Generate all possible preference profiles for small instances using systematic enumeration
 static void generate_all_preference_profiles(int n, int* total_instances, 
                                            int* k_stable_count, double* total_time) {
-    // This is a simplified version - in practice, you'd need a more sophisticated
-    // approach to generate all possible preference profiles
-    // For now, we'll use a large number of random instances as a proxy
+    // For systematic enumeration, we need to generate all possible preference profiles
+    // Each agent can have any permutation of the n objects
+    // Total combinations = n!^n
     
-    int num_samples = (n <= 3) ? 1000 : (n == 4) ? 100 : 10;
-    *total_instances = num_samples;
-    
-    for (int sample = 0; sample < num_samples; sample++) {
-        problem_instance_t* instance = generate_random_house_allocation(n, sample);
-        if (instance == NULL) continue;
+    if (n > 3) {
+        // For n > 3, use random sampling as fallback due to computational complexity
+        // n=4: 4!^4 = 24^4 = 331,776 combinations (too many)
+        int num_samples = (n == 4) ? 1000 : (n == 5) ? 100 : 10;
+        *total_instances = num_samples;
         
-        for (int k = 1; k <= n; k++) {
-            clock_t start = clock();
-            bool exists = k_stable_matching_exists(instance, k);
-            clock_t end = clock();
+        for (int sample = 0; sample < num_samples; sample++) {
+            problem_instance_t* instance = generate_random_house_allocation(n, sample);
+            if (instance == NULL) continue;
             
-            double time_ms = ((double)(end - start)) / CLOCKS_PER_SEC * 1000.0;
-            total_time[k] += time_ms;
-            
-            if (exists) {
-                k_stable_count[k]++;
+            for (int k = 1; k <= n; k++) {
+                clock_t start = clock();
+                bool exists = k_stable_matching_exists(instance, k);
+                clock_t end = clock();
+                
+                double time_ms = ((double)(end - start)) / CLOCKS_PER_SEC * 1000.0;
+                total_time[k] += time_ms;
+                
+                if (exists) {
+                    k_stable_count[k]++;
+                }
             }
+            
+            free(instance);
+        }
+        return;
+    }
+    
+    // For n <= 3, use true systematic enumeration
+    // n=2: 2!^2 = 4 combinations
+    // n=3: 3!^3 = 216 combinations
+    *total_instances = 0;
+    
+    // Initialize the base permutation
+    int base_perm[MAX_AGENTS];
+    for (int i = 0; i < n; i++) {
+        base_perm[i] = i;
+    }
+    
+    // Generate all possible combinations of preference profiles
+    generate_all_agent_permutations(base_perm, n, 0, total_instances, k_stable_count, total_time);
+}
+
+// Global storage for current preference profile being generated
+static int current_preferences[MAX_AGENTS][MAX_AGENTS];
+
+// Generate all permutations for all agents systematically
+static void generate_all_agent_permutations(int* base_perm, int n, int agent_index,
+                                          int* total_instances, int* k_stable_count, double* total_time) {
+    if (agent_index >= n) {
+        // All agents have been assigned preferences, process this complete profile
+        process_complete_preference_profile(n, k_stable_count, total_time);
+        (*total_instances)++;
+        return;
+    }
+    
+    // Generate all permutations for the current agent
+    int agent_perm[MAX_AGENTS];
+    for (int i = 0; i < n; i++) {
+        agent_perm[i] = base_perm[i];
+    }
+    
+    generate_agent_permutation(agent_perm, 0, n-1, agent_index, n, total_instances, k_stable_count, total_time);
+}
+
+// Generate all permutations for a single agent
+static void generate_agent_permutation(int* arr, int start, int end, int agent_index, int n,
+                                     int* total_instances, int* k_stable_count, double* total_time) {
+    if (start == end) {
+        // Store this permutation for the current agent
+        for (int i = 0; i < n; i++) {
+            current_preferences[agent_index][i] = arr[i];
         }
         
-        free(instance);
+        // Move to next agent
+        generate_all_agent_permutations(arr, n, agent_index + 1, total_instances, k_stable_count, total_time);
+        return;
     }
+    
+    for (int i = start; i <= end; i++) {
+        swap(&arr[start], &arr[i]);
+        generate_agent_permutation(arr, start + 1, end, agent_index, n, total_instances, k_stable_count, total_time);
+        swap(&arr[start], &arr[i]); // backtrack
+    }
+}
+
+// Process a complete preference profile (all agents have been assigned preferences)
+static void process_complete_preference_profile(int n, int* k_stable_count, double* total_time) {
+    // Create a problem instance with the current complete preference profile
+    problem_instance_t* instance = malloc(sizeof(problem_instance_t));
+    if (instance == NULL) return;
+    
+    instance->num_agents = n;
+    instance->model = HOUSE_ALLOCATION;
+    instance->model_data.house_data.num_houses = n;
+    
+    // Set preferences for all agents
+    for (int agent = 0; agent < n; agent++) {
+        instance->agents[agent].id = agent;
+        instance->agents[agent].num_preferences = n;
+        
+        for (int i = 0; i < n; i++) {
+            instance->agents[agent].preferences[i] = current_preferences[agent][i];
+        }
+    }
+    
+    // Test k-stability for all k values
+    for (int k = 1; k <= n; k++) {
+        clock_t start = clock();
+        bool exists = k_stable_matching_exists(instance, k);
+        clock_t end = clock();
+        
+        double time_ms = ((double)(end - start)) / CLOCKS_PER_SEC * 1000.0;
+        total_time[k] += time_ms;
+        
+        if (exists) {
+            k_stable_count[k]++;
+        }
+    }
+    
+    free(instance);
+}
+
+// Helper function to swap two integers
+static void swap(int* a, int* b) {
+    int temp = *a;
+    *a = *b;
+    *b = temp;
 }
 
 // Large random instances analysis with comprehensive k testing
@@ -543,5 +657,178 @@ void analyze_key_k_values() {
             printf("\t%.2f", rate);
         }
         printf("\n");
+    }
+}
+
+// Benchmark k-hai vs complete preferences comparison
+void benchmark_k_hai_comparison(int num_agents, int num_objects, int num_trials) {
+    printf("=== k-hai vs Complete Preferences Comparison ===\n");
+    printf("Agents: %d, Objects: %d, Trials: %d\n\n", num_agents, num_objects, num_trials);
+    
+    printf("Model\t\t\tk\tExists\tTime (ms)\tAlgorithm\n");
+    printf("-----\t\t\t-\t------\t---------\t---------\n");
+    
+    // Test different k values
+    int k_values[] = {1, 2, 3, num_agents/2, num_agents-1, num_agents};
+    int num_k_values = sizeof(k_values) / sizeof(k_values[0]);
+    
+    for (int ki = 0; ki < num_k_values; ki++) {
+        int k = k_values[ki];
+        if (k <= 0 || k > num_agents) continue;
+        
+        // Test complete preferences (house allocation)
+        double total_time_complete = 0.0;
+        int exists_count_complete = 0;
+        
+        for (int trial = 0; trial < num_trials; trial++) {
+            problem_instance_t* instance = generate_random_house_allocation(num_agents, time(NULL) + trial);
+            if (instance == NULL) continue;
+            
+            clock_t start = clock();
+            bool exists = k_stable_matching_exists(instance, k);
+            clock_t end = clock();
+            
+            double time_ms = ((double)(end - start)) / CLOCKS_PER_SEC * 1000.0;
+            total_time_complete += time_ms;
+            
+            if (exists) exists_count_complete++;
+            
+            free(instance);
+        }
+        
+        double avg_time_complete = total_time_complete / num_trials;
+        double exists_rate_complete = (double)exists_count_complete / num_trials;
+        double k_ratio = (double)k / num_agents;
+        const char* algorithm = (k_ratio <= 0.1) ? "small-k" : (k_ratio >= 0.8) ? "large-k" : "pruning";
+        
+        printf("Complete Preferences\t%d\t%.2f\t%.3f\t\t%s\n", k, exists_rate_complete, avg_time_complete, algorithm);
+        
+        // Test partial preferences (k-hai)
+        double total_time_partial = 0.0;
+        int exists_count_partial = 0;
+        
+        for (int trial = 0; trial < num_trials; trial++) {
+            problem_instance_t* instance = generate_k_hai_instance(num_agents, num_objects, time(NULL) + trial + 1000);
+            if (instance == NULL) continue;
+            
+            clock_t start = clock();
+            bool exists = k_stable_matching_exists(instance, k);
+            clock_t end = clock();
+            
+            double time_ms = ((double)(end - start)) / CLOCKS_PER_SEC * 1000.0;
+            total_time_partial += time_ms;
+            
+            if (exists) exists_count_partial++;
+            
+            free(instance);
+        }
+        
+        double avg_time_partial = total_time_partial / num_trials;
+        double exists_rate_partial = (double)exists_count_partial / num_trials;
+        
+        printf("Partial Preferences\t%d\t%.2f\t%.3f\t\t%s\n", k, exists_rate_partial, avg_time_partial, algorithm);
+        printf("\n");
+    }
+}
+
+// Benchmark partial vs complete preferences
+void benchmark_partial_vs_complete_preferences(int num_agents, int num_trials) {
+    printf("=== Partial vs Complete Preferences Analysis ===\n");
+    printf("Agents: %d, Trials: %d\n\n", num_agents, num_trials);
+    
+    printf("Preference Type\t\tk=1\tk=2\tk=3\tk=n/2\tk=n-1\tk=n\n");
+    printf("----------------\t---\t---\t---\t-----\t------\t---\n");
+    
+    // Test complete preferences
+    printf("Complete\t\t");
+    for (int k = 1; k <= num_agents; k++) {
+        if (k == 1 || k == 2 || k == 3 || k == num_agents/2 || k == num_agents-1 || k == num_agents) {
+            int exists_count = 0;
+            
+            for (int trial = 0; trial < num_trials; trial++) {
+                problem_instance_t* instance = generate_random_house_allocation(num_agents, time(NULL) + trial);
+                if (instance == NULL) continue;
+                
+                bool exists = k_stable_matching_exists(instance, k);
+                if (exists) exists_count++;
+                
+                free(instance);
+            }
+            
+            double rate = (double)exists_count / num_trials;
+            printf("%.2f\t", rate);
+        }
+    }
+    printf("\n");
+    
+    // Test partial preferences
+    printf("Partial\t\t\t");
+    for (int k = 1; k <= num_agents; k++) {
+        if (k == 1 || k == 2 || k == 3 || k == num_agents/2 || k == num_agents-1 || k == num_agents) {
+            int exists_count = 0;
+            
+            for (int trial = 0; trial < num_trials; trial++) {
+                problem_instance_t* instance = generate_k_hai_instance(num_agents, num_agents, time(NULL) + trial + 2000);
+                if (instance == NULL) continue;
+                
+                bool exists = k_stable_matching_exists(instance, k);
+                if (exists) exists_count++;
+                
+                free(instance);
+            }
+            
+            double rate = (double)exists_count / num_trials;
+            printf("%.2f\t", rate);
+        }
+    }
+    printf("\n");
+}
+
+// Analyze k-hai existence patterns
+void analyze_k_hai_existence_patterns(int num_agents, int num_objects, int num_trials) {
+    printf("=== k-hai Existence Patterns Analysis ===\n");
+    printf("Agents: %d, Objects: %d, Trials: %d\n\n", num_agents, num_objects, num_trials);
+    
+    printf("k\tk/n\t\tComplete\tPartial\t\tWith Indifferences\n");
+    printf("-\t---\t\t--------\t-------\t\t------------------\n");
+    
+    for (int k = 1; k <= num_agents; k++) {
+        double k_ratio = (double)k / num_agents;
+        
+        // Test complete preferences
+        int exists_complete = 0;
+        for (int trial = 0; trial < num_trials; trial++) {
+            problem_instance_t* instance = generate_random_house_allocation(num_agents, time(NULL) + trial);
+            if (instance == NULL) continue;
+            
+            if (k_stable_matching_exists(instance, k)) exists_complete++;
+            free(instance);
+        }
+        
+        // Test partial preferences
+        int exists_partial = 0;
+        for (int trial = 0; trial < num_trials; trial++) {
+            problem_instance_t* instance = generate_k_hai_instance(num_agents, num_objects, time(NULL) + trial + 3000);
+            if (instance == NULL) continue;
+            
+            if (k_stable_matching_exists(instance, k)) exists_partial++;
+            free(instance);
+        }
+        
+        // Test partial preferences with indifferences
+        int exists_indifferences = 0;
+        for (int trial = 0; trial < num_trials; trial++) {
+            problem_instance_t* instance = generate_k_hai_with_indifferences(num_agents, num_objects, time(NULL) + trial + 4000);
+            if (instance == NULL) continue;
+            
+            if (k_stable_matching_exists(instance, k)) exists_indifferences++;
+            free(instance);
+        }
+        
+        double rate_complete = (double)exists_complete / num_trials;
+        double rate_partial = (double)exists_partial / num_trials;
+        double rate_indifferences = (double)exists_indifferences / num_trials;
+        
+        printf("%d\t%.3f\t\t%.3f\t\t%.3f\t\t%.3f\n", k, k_ratio, rate_complete, rate_partial, rate_indifferences);
     }
 }

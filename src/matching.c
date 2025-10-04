@@ -195,6 +195,29 @@ bool is_valid_matching(const matching_t* matching, const problem_instance_t* ins
             // In roommates model, any agent can be matched with any other agent
             // No additional constraints beyond symmetry
             break;
+            
+        case HOUSE_ALLOCATION_PARTIAL:
+            // Similar to house allocation but with partial preferences
+            // Each house can only be assigned to one agent
+            {
+            bool house_assigned[MAX_AGENTS] = {false};
+            
+            for (int i = 0; i < matching->num_agents; i++) {
+                int house = matching->pairs[i];
+                if (house != -1) {
+                    // Check that house ID is valid
+                    if (house < 0 || house >= instance->model_data.house_partial_data.num_houses) {
+                        return false;
+                    }
+                    // Check that this house is not assigned to multiple agents
+                    if (house_assigned[house]) {
+                        return false;  // House assigned to multiple agents
+                    }
+                    house_assigned[house] = true;
+                }
+            }
+            }
+            break;
     }
     
     return true;

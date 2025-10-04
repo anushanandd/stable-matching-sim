@@ -281,3 +281,157 @@ void print_problem_instance(const problem_instance_t* instance) {
         printf("\n");
     }
 }
+
+// Generate k-hai instance with partial preferences
+problem_instance_t* generate_k_hai_instance(int num_agents, int num_objects, uint32_t seed) {
+    if (num_agents <= 0 || num_objects <= 0 || num_agents > MAX_AGENTS || num_objects > MAX_AGENTS) {
+        return NULL;
+    }
+    
+    lcg_seed(seed);
+    
+    problem_instance_t* instance = malloc(sizeof(problem_instance_t));
+    if (instance == NULL) {
+        return NULL;
+    }
+    
+    instance->num_agents = num_agents;
+    instance->model = HOUSE_ALLOCATION_PARTIAL;
+    instance->model_data.house_partial_data.num_houses = num_objects;
+    
+    // Initialize agents with partial preferences
+    for (int i = 0; i < num_agents; i++) {
+        instance->agents[i].id = i;
+        instance->agents[i].has_indifferences = false;
+        
+        // Determine how many objects this agent finds acceptable (at least 1, at most num_objects)
+        int num_acceptable = 1 + (lcg_rand() % num_objects);
+        instance->agents[i].num_preferences = num_acceptable;
+        instance->model_data.house_partial_data.num_acceptable_objects[i] = num_acceptable;
+        
+        // Create list of all objects
+        int all_objects[MAX_AGENTS];
+        for (int j = 0; j < num_objects; j++) {
+            all_objects[j] = j;
+        }
+        
+        // Shuffle and take first num_acceptable objects
+        shuffle_array(all_objects, num_objects);
+        
+        // Set preferences (only over acceptable objects)
+        for (int j = 0; j < num_acceptable; j++) {
+            instance->agents[i].preferences[j] = all_objects[j];
+        }
+        
+        // Initialize indifference groups (no indifferences by default)
+        for (int j = 0; j < num_acceptable; j++) {
+            instance->agents[i].indifference_groups[j] = j; // Each object in its own group
+        }
+    }
+    
+    return instance;
+}
+
+// Generate k-hai instance with indifferences
+problem_instance_t* generate_k_hai_with_indifferences(int num_agents, int num_objects, uint32_t seed) {
+    if (num_agents <= 0 || num_objects <= 0 || num_agents > MAX_AGENTS || num_objects > MAX_AGENTS) {
+        return NULL;
+    }
+    
+    lcg_seed(seed);
+    
+    problem_instance_t* instance = malloc(sizeof(problem_instance_t));
+    if (instance == NULL) {
+        return NULL;
+    }
+    
+    instance->num_agents = num_agents;
+    instance->model = HOUSE_ALLOCATION_PARTIAL;
+    instance->model_data.house_partial_data.num_houses = num_objects;
+    
+    // Initialize agents with partial preferences and indifferences
+    for (int i = 0; i < num_agents; i++) {
+        instance->agents[i].id = i;
+        
+        // Determine how many objects this agent finds acceptable
+        int num_acceptable = 1 + (lcg_rand() % num_objects);
+        instance->agents[i].num_preferences = num_acceptable;
+        instance->model_data.house_partial_data.num_acceptable_objects[i] = num_acceptable;
+        
+        // Create list of all objects
+        int all_objects[MAX_AGENTS];
+        for (int j = 0; j < num_objects; j++) {
+            all_objects[j] = j;
+        }
+        
+        // Shuffle and take first num_acceptable objects
+        shuffle_array(all_objects, num_objects);
+        
+        // Set preferences
+        for (int j = 0; j < num_acceptable; j++) {
+            instance->agents[i].preferences[j] = all_objects[j];
+        }
+        
+        // Create indifferences (ties) in preferences
+        instance->agents[i].has_indifferences = (lcg_rand() % 3 == 0); // 1/3 chance of having indifferences
+        
+        if (instance->agents[i].has_indifferences && num_acceptable >= 2) {
+            // Create some indifference groups
+            int num_groups = 1 + (lcg_rand() % (num_acceptable / 2 + 1));
+            int group_id = 0;
+            
+            for (int j = 0; j < num_acceptable; j++) {
+                instance->agents[i].indifference_groups[j] = group_id;
+                // Move to next group with some probability
+                if (j < num_acceptable - 1 && lcg_rand() % 3 == 0) {
+                    group_id++;
+                }
+            }
+        } else {
+            // No indifferences
+            for (int j = 0; j < num_acceptable; j++) {
+                instance->agents[i].indifference_groups[j] = j;
+            }
+        }
+    }
+    
+    return instance;
+}
+
+// Check if an object is acceptable to an agent (for k-hai)
+bool is_object_acceptable_to_agent(const agent_t* agent, int object_id, int num_objects) {
+    if (agent == NULL || object_id < 0 || object_id >= num_objects) {
+        return false;
+    }
+    
+    // Check if object is in agent's preference list
+    for (int i = 0; i < agent->num_preferences; i++) {
+        if (agent->preferences[i] == object_id) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+// Check if an agent is indifferent between two objects (for k-hai)
+bool agent_indifferent_between(const agent_t* agent, int obj1, int obj2) {
+    if (agent == NULL || !agent->has_indifferences) {
+        return false;
+    }
+    
+    // Find the positions of obj1 and obj2 in preferences
+    int pos1 = -1, pos2 = -1;
+    for (int i = 0; i < agent->num_preferences; i++) {
+        if (agent->preferences[i] == obj1) pos1 = i;
+        if (agent->preferences[i] == obj2) pos2 = i;
+    }
+    
+    // If either object is not in preferences, they're not indifferent
+    if (pos1 == -1 || pos2 == -1) {
+        return false;
+    }
+    
+    // Check if they're in the same indifference group
+    return agent->indifference_groups[pos1] == agent->indifference_groups[pos2];
+}
