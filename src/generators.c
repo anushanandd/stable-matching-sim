@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "matching.h"
+#include "../include/matching.h"
 
 // Improved random number generator using xorshift32
 static uint32_t rng_state = 1;
