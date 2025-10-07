@@ -7,13 +7,21 @@
 // Forward declarations
 static bool find_k_stable_matching_recursive(const problem_instance_t* instance, int k, 
                                            matching_t* current_matching, int agent_index);
+static bool find_k_stable_matching_recursive_enhanced(const problem_instance_t* instance, int k, 
+                                                    matching_t* current_matching, int agent_index);
 static bool is_partial_matching_valid(const matching_t* matching, const problem_instance_t* instance, 
                                     int up_to_agent);
 // Removed unused function declaration
 static bool find_k_stable_with_pruning(const problem_instance_t* instance, int k);
 static bool is_promising_partial_matching(const matching_t* partial_matching, const problem_instance_t* instance, 
                                         int k, int agents_processed);
+static bool is_promising_partial_matching_enhanced(const matching_t* partial_matching, const problem_instance_t* instance, 
+                                                 int k, int agents_processed);
 static int estimate_blocking_potential(const matching_t* matching, const problem_instance_t* instance, int k);
+static int estimate_blocking_potential_enhanced(const matching_t* matching, const problem_instance_t* instance, int k);
+static bool has_conflict_early_detection(const matching_t* partial_matching, const problem_instance_t* instance, int k);
+static int score_matching_quality(const matching_t* matching, const problem_instance_t* instance, int k);
+static bool can_reach_k_stable(const matching_t* partial_matching, const problem_instance_t* instance, int k, int agents_processed);
 
 // Check if a k-stable matching exists (main function)
 bool k_stable_matching_exists(const problem_instance_t* instance, int k) {
@@ -37,7 +45,7 @@ bool k_stable_matching_exists(const problem_instance_t* instance, int k) {
     }
 }
 
-// Improved algorithm with pruning for medium k values
+// Enhanced algorithm with advanced pruning for medium k values
 static bool find_k_stable_with_pruning(const problem_instance_t* instance, int k) {
     matching_t* matching = create_matching(instance->num_agents, instance->model);
     if (matching == NULL) {
@@ -49,8 +57,8 @@ static bool find_k_stable_with_pruning(const problem_instance_t* instance, int k
         matching->pairs[i] = -1;
     }
     
-    // Use improved recursive search with better pruning
-    bool exists = find_k_stable_matching_recursive(instance, k, matching, 0);
+    // Use enhanced recursive search with advanced pruning strategies
+    bool exists = find_k_stable_matching_recursive_enhanced(instance, k, matching, 0);
     
     destroy_matching(matching);
     return exists;
@@ -128,6 +136,125 @@ static bool find_k_stable_matching_recursive(const problem_instance_t* instance,
     // Also try leaving the current agent unmatched (if allowed by the model)
     if (instance->model == HOUSE_ALLOCATION || instance->model == ROOMMATES) {
         return find_k_stable_matching_recursive(instance, k, current_matching, agent_index + 1);
+    }
+    
+    return false;
+}
+
+// Enhanced recursive function with advanced pruning strategies
+static bool find_k_stable_matching_recursive_enhanced(const problem_instance_t* instance, int k, 
+                                                    matching_t* current_matching, int agent_index) {
+    // Base case: if we've assigned all agents, check if the matching is k-stable
+    if (agent_index >= instance->num_agents) {
+        return is_k_stable_direct(current_matching, instance, k);
+    }
+    
+    // Enhanced early pruning: multiple pruning strategies
+    if (!is_promising_partial_matching_enhanced(current_matching, instance, k, agent_index)) {
+        return false;
+    }
+    
+    // Early conflict detection
+    if (has_conflict_early_detection(current_matching, instance, k)) {
+        return false;
+    }
+    
+    // If current agent is already matched, move to next agent
+    if (current_matching->pairs[agent_index] != -1) {
+        return find_k_stable_matching_recursive_enhanced(instance, k, current_matching, agent_index + 1);
+    }
+    
+    // Get ordered list of potential partners with enhanced scoring
+    int potential_partners[MAX_AGENTS];
+    int partner_scores[MAX_AGENTS];
+    int num_potential = 0;
+    
+    // Score and order potential partners by quality
+    for (int pref_idx = 0; pref_idx < instance->agents[agent_index].num_preferences; pref_idx++) {
+        int partner = instance->agents[agent_index].preferences[pref_idx];
+        
+        // Skip if trying to match with self
+        if (partner == agent_index) {
+            continue;
+        }
+        
+        // Skip if partner is already matched
+        if (current_matching->pairs[partner] != -1) {
+            continue;
+        }
+        
+        // Model-specific constraints
+        if (instance->model == MARRIAGE) {
+            int num_men = instance->model_data.marriage_data.num_men;
+            if ((agent_index < num_men && partner < num_men) || 
+                (agent_index >= num_men && partner >= num_men)) {
+                continue;
+            }
+        }
+        
+        // Calculate partner quality score
+        int score = 0;
+        
+        // Mutual preference score
+        int reverse_rank = get_agent_rank(&instance->agents[partner], agent_index);
+        if (reverse_rank != -1) {
+            score += (instance->agents[partner].num_preferences - reverse_rank) * 10;
+        }
+        
+        // Preference rank score (lower rank = higher score)
+        score += (instance->agents[agent_index].num_preferences - pref_idx) * 5;
+        
+        // Stability potential score
+        if (reverse_rank != -1 && reverse_rank < instance->agents[partner].num_preferences / 2) {
+            score += 20; // Bonus for mutual high preference
+        }
+        
+        potential_partners[num_potential] = partner;
+        partner_scores[num_potential] = score;
+        num_potential++;
+    }
+    
+    // Sort partners by score (highest first)
+    for (int i = 0; i < num_potential - 1; i++) {
+        for (int j = i + 1; j < num_potential; j++) {
+            if (partner_scores[i] < partner_scores[j]) {
+                int temp_partner = potential_partners[i];
+                int temp_score = partner_scores[i];
+                potential_partners[i] = potential_partners[j];
+                partner_scores[i] = partner_scores[j];
+                potential_partners[j] = temp_partner;
+                partner_scores[j] = temp_score;
+            }
+        }
+    }
+    
+    // Try partners in quality order
+    for (int i = 0; i < num_potential; i++) {
+        int partner = potential_partners[i];
+        
+        // Try this matching
+        current_matching->pairs[agent_index] = partner;
+        current_matching->pairs[partner] = agent_index;
+        
+        // Enhanced validation with quality check
+        if (is_partial_matching_valid(current_matching, instance, agent_index)) {
+            // Check if this partial matching can still reach k-stability
+            if (can_reach_k_stable(current_matching, instance, k, agent_index + 1)) {
+                // Recursively try to complete the matching
+                if (find_k_stable_matching_recursive_enhanced(instance, k, current_matching, agent_index + 1)) {
+                    return true;
+                }
+            }
+        }
+        
+        // Backtrack: undo this matching
+        current_matching->pairs[agent_index] = -1;
+        current_matching->pairs[partner] = -1;
+    }
+    
+    // Also try leaving the current agent unmatched (if allowed by the model)
+    if (instance->model == HOUSE_ALLOCATION || instance->model == ROOMMATES || instance->model == HOUSE_ALLOCATION_PARTIAL) {
+        return find_k_stable_matching_recursive_enhanced(instance, k, current_matching, agent_index + 1);
     }
     
     return false;
@@ -491,4 +618,167 @@ static int count_k_stable_matchings_recursive(const problem_instance_t* instance
     }
     
     return count;
+}
+
+// Enhanced heuristic check for partial matching promise
+static bool is_promising_partial_matching_enhanced(const matching_t* partial_matching, const problem_instance_t* instance, 
+                                                 int k, int agents_processed) {
+    // Use enhanced blocking potential estimation
+    int blocking_potential = estimate_blocking_potential_enhanced(partial_matching, instance, k);
+    
+    // If the blocking potential is already too high, prune this branch
+    if (blocking_potential >= k) {
+        return false;
+    }
+    
+    // Check if we can still achieve k-stability with remaining agents
+    int remaining_agents = instance->num_agents - agents_processed;
+    int unmatched_count = 0;
+    int dissatisfied_count = 0;
+    
+    for (int i = 0; i < agents_processed; i++) {
+        if (partial_matching->pairs[i] == -1) {
+            unmatched_count++;
+        } else {
+            // Check if agent is dissatisfied with current match
+            int current_rank = get_agent_rank(&instance->agents[i], partial_matching->pairs[i]);
+            if (current_rank > instance->agents[i].num_preferences / 2) {
+                dissatisfied_count++;
+            }
+        }
+    }
+    
+    // Enhanced pruning: if too many agents are dissatisfied or unmatched
+    if (dissatisfied_count + unmatched_count >= k) {
+        return false;
+    }
+    
+    // Check if remaining agents can provide enough good matches
+    if (unmatched_count + remaining_agents < k) {
+        return true; // We can still make progress
+    }
+    
+    return true;
+}
+
+// Enhanced blocking potential estimation
+static int estimate_blocking_potential_enhanced(const matching_t* matching, const problem_instance_t* instance, int k) {
+    int potential = 0;
+    int dissatisfied_agents = 0;
+    int unmatched_agents = 0;
+    
+    // Count agents who are clearly dissatisfied or unmatched
+    for (int i = 0; i < instance->num_agents; i++) {
+        int current_partner = matching->pairs[i];
+        
+        if (current_partner == -1) {
+            unmatched_agents++;
+        } else {
+            // Check if agent has much better alternatives available
+            int current_rank = get_agent_rank(&instance->agents[i], current_partner);
+            if (current_rank > 2) { // If current partner is not in top 2 preferences
+                dissatisfied_agents++;
+            }
+            
+            // Check if agent has significantly better alternatives
+            for (int pref_idx = 0; pref_idx < 2 && pref_idx < instance->agents[i].num_preferences; pref_idx++) {
+                int preferred = instance->agents[i].preferences[pref_idx];
+                if (preferred != current_partner && matching->pairs[preferred] == -1) {
+                    // Agent has a much better unmatched alternative
+                    potential += 2;
+                    break;
+                }
+            }
+        }
+    }
+    
+    // Weighted combination of different factors
+    potential += dissatisfied_agents * 2;
+    potential += unmatched_agents * 3;
+    
+    return potential;
+}
+
+// Early conflict detection
+static bool has_conflict_early_detection(const matching_t* partial_matching, const problem_instance_t* instance, int k) {
+    // Check for obvious conflicts that would prevent k-stability
+    
+    // Count agents with very poor matches
+    int poor_matches = 0;
+    for (int i = 0; i < instance->num_agents; i++) {
+        if (partial_matching->pairs[i] != -1) {
+            int current_rank = get_agent_rank(&instance->agents[i], partial_matching->pairs[i]);
+            if (current_rank > instance->agents[i].num_preferences * 0.8) {
+                poor_matches++;
+            }
+        }
+    }
+    
+    // If too many agents have poor matches, this is likely to lead to conflicts
+    if (poor_matches >= k) {
+        return true;
+    }
+    
+    // Check for mutual dissatisfaction
+    int mutual_dissatisfaction = 0;
+    for (int i = 0; i < instance->num_agents; i++) {
+        if (partial_matching->pairs[i] != -1) {
+            int partner = partial_matching->pairs[i];
+            int rank_i = get_agent_rank(&instance->agents[i], partner);
+            int rank_j = get_agent_rank(&instance->agents[partner], i);
+            
+            if (rank_i > instance->agents[i].num_preferences / 2 && 
+                rank_j > instance->agents[partner].num_preferences / 2) {
+                mutual_dissatisfaction++;
+            }
+        }
+    }
+    
+    // If there's significant mutual dissatisfaction, this could lead to blocking coalitions
+    if (mutual_dissatisfaction >= k / 2) {
+        return true;
+    }
+    
+    return false;
+}
+
+// Score matching quality
+static int score_matching_quality(const matching_t* matching, const problem_instance_t* instance, int k) {
+    (void)k; // Parameter used for future extensions, suppress warning
+    int score = 0;
+    
+    for (int i = 0; i < instance->num_agents; i++) {
+        if (matching->pairs[i] != -1) {
+            int rank = get_agent_rank(&instance->agents[i], matching->pairs[i]);
+            if (rank != -1) {
+                // Higher score for better matches (lower rank = better)
+                score += instance->agents[i].num_preferences - rank;
+            }
+        }
+    }
+    
+    return score;
+}
+
+// Check if partial matching can still reach k-stability
+static bool can_reach_k_stable(const matching_t* partial_matching, const problem_instance_t* instance, int k, int agents_processed) {
+    // Estimate if we can still achieve k-stability with remaining agents
+    
+    int remaining_agents = instance->num_agents - agents_processed;
+    int current_blocking_potential = estimate_blocking_potential_enhanced(partial_matching, instance, k);
+    
+    // If current blocking potential is already too high
+    if (current_blocking_potential >= k) {
+        return false;
+    }
+    
+    // Estimate potential blocking from remaining agents
+    int estimated_remaining_blocking = remaining_agents / 2; // Conservative estimate
+    
+    // If total estimated blocking potential is too high
+    if (current_blocking_potential + estimated_remaining_blocking >= k) {
+        return false;
+    }
+    
+    return true;
 }
