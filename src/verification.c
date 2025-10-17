@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
-#include "matching.h"
+#include "../include/matching.h"
 
 // Forward declarations for helper functions
 static bool has_k_blocking_coalition(const matching_t* matching, const problem_instance_t* instance, int k);

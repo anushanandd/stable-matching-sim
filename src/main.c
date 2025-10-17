@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "matching.h"
+#include "../include/matching.h"
 
 void print_usage(const char* program_name) {
     printf("Usage: %s [OPTIONS]\n", program_name);
@@ -21,6 +21,8 @@ void print_usage(const char* program_name) {
     printf("  --k-hai N O T       Run k-hai comparison (N agents, O objects, T trials)\n");
     printf("  --partial-vs-complete N T  Compare partial vs complete preferences\n");
     printf("  --k-hai-patterns N O T     Analyze k-hai existence patterns\n");
+    printf("  --brute-force-house N K    Run brute force house allocation analysis\n");
+    printf("  --brute-force-all          Run brute force analysis for multiple n,k values\n");
     printf("  --help              Show this help message\n");
 }
 
@@ -378,6 +380,28 @@ int main(int argc, char* argv[]) {
         }
         
         analyze_k_hai_existence_patterns(num_agents, num_objects, num_trials);
+        return 0;
+    }
+    
+    if (strcmp(argv[1], "--brute-force-house") == 0) {
+        if (argc < 4) {
+            printf("Error: --brute-force-house requires N and K parameters\n");
+            return 1;
+        }
+        int n = atoi(argv[2]);
+        int k = atoi(argv[3]);
+        
+        if (n <= 0 || k <= 0 || k > n) {
+            printf("Error: Invalid parameters for --brute-force-house (n=%d, k=%d)\n", n, k);
+            return 1;
+        }
+        
+        analyze_all_house_allocations(n, k);
+        return 0;
+    }
+    
+    if (strcmp(argv[1], "--brute-force-all") == 0) {
+        run_brute_force_analysis();
         return 0;
     }
     

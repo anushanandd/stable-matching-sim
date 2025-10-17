@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
-#include "matching.h"
+#include "../include/matching.h"
 
 // Forward declarations
 static bool find_k_stable_matching_recursive(const problem_instance_t* instance, int k, 

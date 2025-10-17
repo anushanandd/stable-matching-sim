@@ -3,7 +3,7 @@ CFLAGS = -Wall -Wextra -std=c99 -O2 -g -Iinclude
 LDFLAGS = -lm
 
 # Source files
-SOURCES = src/main.c src/matching.c src/verification.c src/existence.c src/generators.c src/benchmark.c
+SOURCES = src/main.c src/matching.c src/verification.c src/existence.c src/generators.c src/benchmark.c src/brute_force_house_allocation.c
 OBJECTS = $(SOURCES:.c=.o)
 TARGET = k_stable_matching
 
@@ -35,8 +35,17 @@ test_algorithms: tests/test_algorithms.c $(OBJECTS)
 	$(CC) $(CFLAGS) tests/test_algorithms.c $(filter-out src/main.o, $(OBJECTS)) -o tests/test_algorithms $(LDFLAGS)
 	./tests/test_algorithms
 
+# Run constant k analysis for house allocation
+test_constant_k: tests/test_constant_k_house_allocation.c $(OBJECTS)
+	$(CC) $(CFLAGS) tests/test_constant_k_house_allocation.c $(filter-out src/main.o, $(OBJECTS)) -o tests/test_constant_k $(LDFLAGS)
+	./tests/test_constant_k
+
+# Build standalone brute force house allocation program
+brute_force_standalone: brute_force_house_allocation_standalone.c $(filter-out src/main.o, $(OBJECTS))
+	$(CC) $(CFLAGS) brute_force_house_allocation_standalone.c $(filter-out src/main.o, $(OBJECTS)) -o brute_force_house_allocation $(LDFLAGS)
+
 # Create directories
 setup:
 	mkdir -p src include tests data results
 
-.PHONY: all clean test benchmark setup test_algorithms
+.PHONY: all clean test benchmark setup test_algorithms test_constant_k brute_force_standalone

@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include "matching.h"
+#include "../include/matching.h"
 
 // Create a new matching
 matching_t* create_matching(int num_agents, matching_model_t model) {

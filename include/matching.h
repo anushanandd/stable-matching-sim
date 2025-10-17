@@ -111,4 +111,8 @@ void benchmark_k_hai_comparison(int num_agents, int num_objects, int num_trials)
 void benchmark_partial_vs_complete_preferences(int num_agents, int num_trials);
 void analyze_k_hai_existence_patterns(int num_agents, int num_objects, int num_trials);
 
+// Brute force house allocation analysis
+void analyze_all_house_allocations(int n, int k);
+void run_brute_force_analysis(void);
+
 #endif // MATCHING_H
